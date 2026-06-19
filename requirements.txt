@@ -1,0 +1,8 @@
+# Generación de datos sintéticos + servicio de inferencia
+numpy>=1.24
+opencv-python-headless>=4.8
+Pillow>=10.0
+fastapi>=0.110
+uvicorn[standard]>=0.27
+python-multipart>=0.0.9
+pydantic>=2.5

@@ -1,0 +1,5 @@
+path: /home/claude/poroto_cv/samples/synthetic
+train: images/train
+val: images/val
+nc: 1
+names: ['poroto']

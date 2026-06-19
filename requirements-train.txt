@@ -1,0 +1,4 @@
+# Entrenamiento (pesado: trae torch). Instalar sólo donde se entrena.
+ultralytics>=8.1
+torch>=2.1
+torchvision>=0.16

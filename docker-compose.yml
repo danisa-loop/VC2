@@ -1,0 +1,14 @@
+services:
+  poroto:
+    build: .
+    image: poroto-infer
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./repositorio:/app/repositorio        # persistencia de IMAGEN* + metadatos
+      # - ./weights:/app/weights               # descomentá si tenés pesos YOLO
+    environment:
+      - POROTO_SUCCESS=0.5
+      # - POROTO_WEIGHTS=/app/weights/best.pt
+      # - POROTO_CONF=0.25
+    restart: unless-stopped

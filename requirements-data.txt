@@ -1,0 +1,3 @@
+# Sólo para download_data.py
+kagglehub>=0.3      # opción Kaggle (recomendada)
+requests>=2.31      # opción Mendeley

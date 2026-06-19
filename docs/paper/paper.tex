@@ -1,0 +1,234 @@
+%==============================================================================
+%  Paper IEEE - Conteo de granos de soja con detección entrenada con datos
+%  sintéticos.  Formato: IEEEtran (conference).
+%
+%  CÓMO COMPILAR (lo más simple): subí este .tex a https://overleaf.com,
+%  elegí compilador pdfLaTeX, y listo. La clase IEEEtran ya está en Overleaf.
+%  Para agregar las figuras: subí las imágenes y descomentá los bloques \figure.
+%
+%  TODO del equipo: completar autores/afiliación, verificar las 2 citas de
+%  aplicación (SoybeanNet / conteo sintético) y agregar las figuras.
+%==============================================================================
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish,es-noindentfirst]{babel}
+\usepackage{url}
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\begin{document}
+
+\title{Conteo de granos de soja mediante detección de objetos\\
+entrenada con datos sintéticos auto-etiquetados}
+
+\author{\IEEEauthorblockN{Autor 1, Autor 2, Autor 3, Autor 4}
+\IEEEauthorblockA{\textit{Especialización en Inteligencia Artificial (CEIA)} \\
+\textit{Facultad de Ingeniería, Universidad de Buenos Aires}\\
+Buenos Aires, Argentina}}
+
+\maketitle
+
+\begin{abstract}
+El conteo de granos de soja para control de calidad es una tarea repetitiva y
+subjetiva cuando se realiza de forma manual. Su automatización por aprendizaje
+profundo está limitada por la disponibilidad de imágenes etiquetadas a nivel de
+instancia, cuya anotación manual es costosa. Este trabajo propone un
+\textit{prototipo funcional} que resuelve el cuello de botella generando un
+\textbf{dataset sintético con \emph{ground truth} automático}: a partir de granos
+reales segmentados se componen escenas mediante \textit{alpha compositing} y
+\textit{domain randomization}, con control de oclusión, y la etiqueta de cada
+grano se escribe de forma determinista durante la composición. Sobre ese dataset
+se realiza \textit{fine-tuning} de un detector pre-entrenado YOLOv8. El modelo
+nano alcanza \textbf{mAP@0.5 = 0.995}, \textbf{mAP@0.5:0.95 = 0.979} y
+\textbf{error de conteo (MAE) = 0} en validación in-distribution, con
+\textbf{$\sim$13~ms} de inferencia por imagen y solo 3{,}0~M de parámetros. El
+sistema se despliega como un servicio web (FastAPI) que devuelve el conteo, una
+bandera de confianza y la imagen anotada. Se discute de forma explícita la brecha
+\textit{sim-to-real} como límite del enfoque.
+\end{abstract}
+
+\begin{IEEEkeywords}
+visión por computadora, detección de objetos, datos sintéticos, YOLOv8,
+domain randomization, conteo de objetos, agricultura de precisión.
+\end{IEEEkeywords}
+
+\section{Introducción}
+El control de calidad de granos de soja requiere \textbf{cuantificar y localizar}
+cada grano en una muestra. Hecho a mano, el conteo es lento, fatigante y
+subjetivo: dos operarios pueden reportar valores distintos sobre la misma bandeja.
+La visión por computadora basada en \textit{deep learning} permite automatizar la
+tarea, pero su principal limitación práctica no es el modelo sino la
+\textbf{escasez de datos etiquetados a nivel de instancia}: anotar miles de
+imágenes caja por caja es costoso y no cubre la variabilidad real.
+
+\textbf{Objetivo.} Diseñar y validar un prototipo de detección y conteo de granos
+de soja que evite la anotación manual, mediante la \emph{generación de datos
+sintéticos auto-etiquetados} y el \emph{fine-tuning} de un modelo pre-entrenado.
+
+\textbf{Antecedentes recientes.} La automatización del conteo de soja por visión
+es un problema activo. Trabajos recientes ($\leq$8 años) aplican redes profundas
+al conteo de vainas y granos a partir de imágenes de campo y laboratorio, con
+arquitecturas tipo \textit{transformer}-CNN para conteo denso~\cite{soybeannet}, y
+otros emplean \textbf{datos sintéticos} para entrenar modelos de conteo reduciendo
+la anotación manual~\cite{syntheticcount}. El conjunto de imágenes individuales de
+soja empleado en este trabajo proviene de un dataset público
+reciente~\cite{soydataset}. Nuestro aporte combina ambas líneas: un generador
+sintético con \emph{ground truth} exacto y un detector pre-entrenado liviano,
+empaquetado como servicio desplegable.
+
+\section{Metodología, diseño y desarrollo}
+El sistema tiene tres bloques: \textbf{(1)} generación de datos sintéticos,
+\textbf{(2)} entrenamiento y \textbf{(3)} inferencia/despliegue.
+
+\subsection{Extracción y estandarización del grano}
+Se parte de imágenes individuales de granos reales (5513 imágenes de
+$227\times227$, cinco categorías de calidad)~\cite{soydataset}. Cada grano se
+aísla del fondo por umbralizado de \textbf{Otsu}~\cite{otsu}, que elige el umbral
+$t^\*$ que maximiza la varianza inter-clase $\sigma_b^2(t)$. La máscara binaria se
+asigna al \textbf{canal alfa} (RGBA) y se recorta a su \textit{bounding box}, de
+modo que cada grano queda como un componente reutilizable sin fondo. Se incluye un
+mecanismo de \emph{auto-polaridad} que invierte la máscara cuando el borde de la
+imagen queda marcado como objeto, lo que permite operar con fondo claro u oscuro.
+
+\subsection{Generación sintética y \emph{ground truth}}
+Antes de componer la escena, cada grano recibe \textbf{aumentación a nivel de
+componente}: transformaciones afines (rotación $\theta\in[0,360^\circ)$, escala,
+\textit{flips}) y fotométricas en espacio HSV. Esta aleatorización deliberada de
+los factores irrelevantes es \textbf{domain randomization}~\cite{domainrand}, cuya
+hipótesis es que exponer al modelo a suficiente variabilidad simulada lo fuerza a
+aprender lo invariante (la forma del grano) y reduce la brecha
+\textit{sim-to-real}.
+
+La escena se compone sobre un lienzo insertando $N\in[20,150]$ granos. Cada grano
+se fusiona con la ecuación de composición \emph{over}~\cite{porterduff}:
+\begin{equation}
+I = \alpha\,F + (1-\alpha)\,B,
+\end{equation}
+donde $F$ es el grano, $B$ el fondo acumulado y $\alpha$ el canal alfa; esto evita
+bordes duros (\textit{aliasing}). Para evitar oclusiones totales se mantiene una
+máscara global de ocupación y se rechaza una ubicación si el solapamiento relativo
+(derivado de la \textit{Intersection over Union}, $\mathrm{IoU}=|A\cap B|/|A\cup
+B|$) supera un umbral. \textbf{En el mismo paso} en que se ubica un grano se
+escribe su etiqueta en formato YOLO \texttt{[clase, $x_c$, $y_c$, $w$, $h$]}
+normalizada: la anotación es \textbf{exacta por construcción}, sin intervención
+humana. Finalmente se aplica un postprocesamiento global (desenfoque gaussiano y
+ruido de sensor) para unificar la firma óptica de fondo y granos y evitar que la
+red detecte discontinuidades sintéticas en lugar del objeto.
+
+% \begin{figure}[t]\centering
+%   \includegraphics[width=\columnwidth]{synth_sample.jpg}
+%   \caption{Imagen sintética generada con sus cajas de \emph{ground truth}.}
+%   \label{fig:synth}
+% \end{figure}
+
+\subsection{Modelo y entrenamiento}
+Se hace \textit{fine-tuning} de \textbf{YOLOv8}~\cite{yolov8}, un detector
+\textit{one-stage} (predice cajas y clase en una sola pasada, a diferencia de los
+detectores de dos etapas tipo Faster R-CNN). Se parte de pesos pre-entrenados en
+COCO (se transfieren 319/355 tensores) y se reentrena con una sola clase
+(\emph{poroto}). Configuración: entrada $1024\times1024$, 80 épocas, optimizador
+AdamW (selección automática), \textit{mosaic}=0.3 y \textit{flips}, sobre 400
+imágenes de entrenamiento y 100 de validación (1685 instancias). El \textbf{conteo}
+es la cantidad de detecciones por encima del umbral de confianza.
+
+\subsection{Despliegue}
+La inferencia se expone como servicio HTTP (FastAPI): el cliente envía una imagen,
+un módulo ejecuta el modelo, cuenta y devuelve \texttt{\{success, cantidad\}}. En
+paralelo se persiste la \emph{imagen anotada} (cada grano con su contorno e índice
+numérico) y un archivo de metadatos (id, \textit{timestamp}, versión del modelo,
+conteo y confianza). La bandera \texttt{success} se baja cuando la confianza
+promedio cae por debajo de un umbral, señalando que conviene revisión humana.
+
+\section{Resultados experimentales y análisis}
+La Tabla~\ref{tab:res} resume los resultados sobre el conjunto de validación
+(in-distribution). Como línea de base sin entrenamiento se incluye un detector
+clásico (segmentación + \textit{watershed}).
+
+\begin{table}[t]
+\caption{Resultados en validación (100 imágenes, 1685 instancias)}
+\label{tab:res}
+\centering
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Método} & \textbf{mAP@.5} & \textbf{mAP@.5:.95} & \textbf{MAE} & \textbf{Lat.} & \textbf{Params} \\
+\midrule
+Watershed (base) & --- & --- & 6.5 & --- & --- \\
+YOLOv8n & 0.995 & 0.979 & 0.00 & 13~ms & 3.0~M \\
+YOLOv8s & 0.995 & 0.982 & 0.00 & 14~ms & 11.1~M \\
+\bottomrule
+\end{tabular}
+\\[2pt]
+\footnotesize Validación in-distribution; el conteo satura (MAE=0) en ambos
+modelos. Se prioriza nano por tamaño (6 vs 22~MB) ante exactitud equivalente.
+\end{table}
+
+El detector clásico alcanza un \textbf{MAE de 6.5 granos} (MAPE $\approx$6\%):
+cuenta bien en baja densidad y \textbf{subcuenta} cuando los granos se tocan,
+porque el \textit{watershed} fusiona instancias adyacentes. El modelo entrenado
+YOLOv8n logra \textbf{mAP@0.5 = 0.995}, \textbf{mAP@0.5:0.95 = 0.979} y
+\textbf{MAE = 0} en conteo, con $\sim$13~ms de inferencia por imagen y 3{,}0~M de
+parámetros; el entrenamiento completo (80 épocas) tomó $\sim$15~min en una GPU
+NVIDIA T4. El modelo \textit{small} alcanza el mismo mAP@0.5 (0.995) y MAE (0), con un
+mAP@0.5:0.95 marginalmente superior (0.982 vs 0.979), pero con $3{,}7\times$ más
+parámetros (11.1 vs 3.0~M; 22 vs 6~MB) y latencia equivalente. Ante una exactitud
+prácticamente idéntica, se selecciona el \textbf{nano} por su menor tamaño, lo que
+justifica su despliegue.
+
+\textbf{Análisis crítico.} Las métricas casi perfectas se explican porque la
+validación es \textbf{in-distribution}: imágenes sintéticas de la misma
+distribución del entrenamiento, donde la tarea es relativamente fácil. Este
+resultado \textbf{valida el método y el pipeline} (el detector aprende a localizar
+y contar de forma confiable a partir de datos auto-etiquetados), pero \textbf{no}
+prueba la generalización a fotografías reales. La validación con imágenes reales
+etiquetadas —la \textbf{brecha sim-to-real}— es el límite honesto de este
+prototipo. Se observa además degradación en escenas de muy alta densidad por
+oclusión (cajas superpuestas), donde un enfoque de segmentación de instancias o de
+mapas de densidad podría aportar mejoras.
+
+\textbf{¿Por qué composición y no GANs?} Frente a generar imágenes con redes
+generativas, la composición por capas entrega \textbf{etiquetas exactas y gratuitas},
+control explícito de densidad y oclusión, y evita el riesgo de \textit{mode
+collapse}; las GAN producen imágenes plausibles pero sin anotación de instancia.
+
+\section{Conclusiones}
+\begin{enumerate}
+\item El \textbf{cuello de botella de datos} puede resolverse generando un dataset
+sintético con \emph{ground truth} automático, eliminando la anotación manual.
+\item El \emph{fine-tuning} de un detector \textbf{pre-entrenado} (YOLOv8) sobre
+datos sintéticos es suficiente para un conteo confiable en distribución
+(mAP@0.5=0.995, MAE=0).
+\item Para esta tarea, el modelo \textbf{nano} iguala en exactitud al \textit{small}
+y lo supera en tamaño/latencia, por lo que es la mejor opción de despliegue.
+\item Evaluar el \textbf{error de conteo} (MAE/MAPE), y no solo el mAP, es clave
+porque es la métrica alineada con el objetivo de negocio.
+\item La principal limitación es la \textbf{brecha sim-to-real}: la validación con
+fotos reales y, eventualmente, un \emph{fine-tuning} mixto sintético+real son el
+trabajo futuro prioritario.
+\end{enumerate}
+
+\begin{thebibliography}{00}
+\bibitem{soydataset} W. Lin \textit{et al.}, ``Soybean image dataset for
+classification,'' \textit{Data in Brief}, vol.~48, 109300, 2023.
+\bibitem{yolov8} G. Jocher, A. Chaurasia, and J. Qiu, ``Ultralytics YOLOv8,''
+2023. [Online]. Disponible: \url{https://github.com/ultralytics/ultralytics}
+\bibitem{otsu} N. Otsu, ``A threshold selection method from gray-level
+histograms,'' \textit{IEEE Trans. Syst., Man, Cybern.}, vol.~9, no.~1, pp.~62--66,
+1979.
+\bibitem{porterduff} T. Porter and T. Duff, ``Compositing digital images,''
+\textit{Proc. SIGGRAPH}, pp.~253--259, 1984.
+\bibitem{domainrand} J. Tobin \textit{et al.}, ``Domain randomization for
+transferring deep neural networks from simulation to the real world,''
+\textit{Proc. IEEE/RSJ IROS}, pp.~23--30, 2017.
+\bibitem{soybeannet} % TODO: verificar datos exactos de la cita
+J. Li \textit{et al.}, ``SoybeanNet: Transformer-based convolutional neural
+network for soybean pod counting,'' \textit{Computers and Electronics in
+Agriculture}, 2024.
+\bibitem{syntheticcount} % TODO: verificar datos exactos de la cita
+``Synthetic data for soybean pod and seed counting,'' arXiv:2502.15286, 2025.
+\end{thebibliography}
+
+\end{document}

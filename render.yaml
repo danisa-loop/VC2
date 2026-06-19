@@ -1,0 +1,11 @@
+# Blueprint de Render (https://render.com). Conectá el repo y Render lo lee solo.
+services:
+  - type: web
+    name: poroto-conteo
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free                 # el plan free duerme tras inactividad; sube en ~30s
+    healthCheckPath: /health
+    envVars:
+      - key: POROTO_SUCCESS
+        value: "0.5"

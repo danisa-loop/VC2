@@ -1,0 +1,8 @@
+{
+  "n_images": 6,
+  "n_val": 2,
+  "grains_per_image_mean": 93.16666666666667,
+  "grains_per_image_min": 23,
+  "grains_per_image_max": 143,
+  "total_instances": 559
+}

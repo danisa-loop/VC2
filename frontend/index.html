@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Contador de Porotos · Panel de inspección</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#14201A; --surface:#1C2C24; --surface-2:#23382E;
+    --line:#33503F; --text:#E8EFE9; --muted:#8FAF9C;
+    --soy:#D8A657; --signal:#4ADE80; --warn:#F4B740; --danger:#EF6F6F;
+    --display:"Space Grotesk", system-ui, sans-serif;
+    --mono:"JetBrains Mono", ui-monospace, monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--display);
+       -webkit-font-smoothing:antialiased;line-height:1.5}
+  .wrap{max-width:1180px;margin:0 auto;padding:32px 24px 64px}
+  header{display:flex;align-items:baseline;justify-content:space-between;
+         gap:16px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:18px}
+  .brand{display:flex;align-items:center;gap:14px}
+  .seed{width:30px;height:30px;border-radius:50% 50% 50% 8px;
+        background:radial-gradient(circle at 35% 30%, #E8C079, var(--soy) 60%, #9c6f2c);
+        box-shadow:inset -2px -3px 4px rgba(0,0,0,.35)}
+  h1{font-size:21px;font-weight:700;margin:0;letter-spacing:-.01em}
+  .sub{color:var(--muted);font-size:13px;margin-top:2px}
+  .endpoint{font-family:var(--mono);font-size:12px;color:var(--muted);
+            background:var(--surface);border:1px solid var(--line);
+            padding:6px 10px;border-radius:8px;display:flex;align-items:center;gap:8px}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+  .dot.live{background:var(--signal);box-shadow:0 0 8px var(--signal)}
+
+  .grid{display:grid;grid-template-columns:1.35fr 1fr;gap:24px;margin-top:28px}
+  @media(max-width:880px){.grid{grid-template-columns:1fr}}
+
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+  .panel-h{padding:14px 18px;font-size:12px;letter-spacing:.14em;text-transform:uppercase;
+           color:var(--muted);border-bottom:1px solid var(--line)}
+
+  /* Visor */
+  .viewport{position:relative;aspect-ratio:1/1;background:
+      repeating-conic-gradient(#1a2a22 0% 25%, #182620 0% 50%) 50%/28px 28px;
+      display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .viewport.drag{outline:2px dashed var(--soy);outline-offset:-10px}
+  .viewport img{width:100%;height:100%;object-fit:contain;display:none}
+  .hint{position:absolute;text-align:center;color:var(--muted);padding:24px}
+  .hint b{color:var(--text);font-weight:500}
+  .corner{position:absolute;width:22px;height:22px;border:2px solid var(--soy);opacity:.6}
+  .corner.tl{top:14px;left:14px;border-right:0;border-bottom:0}
+  .corner.tr{top:14px;right:14px;border-left:0;border-bottom:0}
+  .corner.bl{bottom:14px;left:14px;border-right:0;border-top:0}
+  .corner.br{bottom:14px;right:14px;border-left:0;border-top:0}
+
+  .controls{display:flex;gap:12px;padding:16px 18px;border-top:1px solid var(--line);flex-wrap:wrap}
+  button{font-family:var(--display);font-weight:600;font-size:14px;border-radius:10px;
+         border:1px solid var(--line);padding:11px 18px;cursor:pointer;background:var(--surface-2);
+         color:var(--text);transition:.15s}
+  button.primary{background:var(--soy);color:#241a08;border-color:var(--soy)}
+  button.primary:hover{filter:brightness(1.07)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+
+  /* Lectura */
+  .readout{padding:22px 20px;display:flex;flex-direction:column;gap:20px}
+  .status{display:flex;align-items:center;gap:12px;font-size:13px}
+  .lamp{width:14px;height:14px;border-radius:50%;background:var(--muted);transition:.2s}
+  .lamp.ok{background:var(--signal);box-shadow:0 0 12px var(--signal)}
+  .lamp.bad{background:var(--warn);box-shadow:0 0 12px var(--warn)}
+  .count{font-family:var(--mono);font-weight:700;font-size:84px;line-height:.9;color:var(--soy)}
+  .count small{display:block;font-family:var(--display);font-size:13px;font-weight:500;
+               color:var(--muted);letter-spacing:.14em;text-transform:uppercase;margin-bottom:6px}
+  .meter{height:10px;border-radius:6px;background:var(--surface-2);overflow:hidden;border:1px solid var(--line)}
+  .meter > i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--soy),var(--signal));transition:width .5s}
+  .meter-row{font-family:var(--mono);font-size:12px;color:var(--muted);display:flex;
+             justify-content:space-between;margin-top:6px}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:13px;
+      font-family:var(--mono);color:var(--muted);padding-top:4px;border-top:1px solid var(--line)}
+  .kv b{color:var(--text);font-weight:400;text-align:right;word-break:break-all}
+  .banner{display:none;padding:11px 14px;border-radius:10px;font-size:13px}
+  .banner.warn{display:block;background:rgba(244,183,64,.12);border:1px solid var(--warn);color:var(--warn)}
+
+  details{margin-top:24px}
+  summary{cursor:pointer;color:var(--muted);font-size:13px;font-family:var(--mono)}
+  pre{background:var(--surface);border:1px solid var(--line);border-radius:12px;
+      padding:16px;overflow:auto;font-family:var(--mono);font-size:12px;color:#bfe3cd}
+  .spin{width:34px;height:34px;border:3px solid var(--line);border-top-color:var(--soy);
+        border-radius:50%;animation:r 1s linear infinite;display:none}
+  @keyframes r{to{transform:rotate(360deg)}}
+  footer{margin-top:40px;color:var(--muted);font-size:12px;font-family:var(--mono)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="seed"></div>
+      <div>
+        <h1>Contador de porotos</h1>
+        <div class="sub">Inspección visual por detección — visión por computadora</div>
+      </div>
+    </div>
+    <div class="endpoint"><span id="dot" class="dot"></span><span id="ep">conectando…</span></div>
+  </header>
+
+  <div class="grid">
+    <!-- VISOR -->
+    <section class="panel">
+      <div class="panel-h">Visor de muestra</div>
+      <div id="viewport" class="viewport">
+        <span class="corner tl"></span><span class="corner tr"></span>
+        <span class="corner bl"></span><span class="corner br"></span>
+        <div id="hint" class="hint"><b>Arrastrá una imagen</b> o hacé clic para elegirla.<br>
+          Se devuelve la imagen con los granos contorneados y numerados.</div>
+        <div id="spin" class="spin"></div>
+        <img id="preview" alt="resultado de inspección" />
+      </div>
+      <div class="controls">
+        <input id="file" type="file" accept="image/*" hidden />
+        <button class="primary" id="run" disabled>Analizar muestra</button>
+        <button id="reset">Limpiar</button>
+      </div>
+    </section>
+
+    <!-- LECTURA -->
+    <section class="panel">
+      <div class="panel-h">Lectura</div>
+      <div class="readout">
+        <div class="status"><span id="lamp" class="lamp"></span><span id="statusTxt">Sin muestra</span></div>
+        <div class="count"><small>Porotos detectados</small><span id="count">—</span></div>
+        <div>
+          <div class="meter"><i id="confBar"></i></div>
+          <div class="meter-row"><span>Confianza promedio</span><span id="confVal">—</span></div>
+        </div>
+        <div id="banner" class="banner warn"></div>
+        <div class="kv">
+          <span>modelo</span><b id="mv">—</b>
+          <span>image_id</span><b id="iid">—</b>
+        </div>
+        <details>
+          <summary>Ver archivo de metadatos (JSON)</summary>
+          <pre id="meta">—</pre>
+        </details>
+      </div>
+    </section>
+  </div>
+  <footer>POST /infer · respuesta {success, cantidad} · se persiste (IMAGEN*, metadatos) en el repositorio</footer>
+</div>
+
+<script>
+// El frontend se sirve desde el mismo origen que la API (FastAPI monta "/").
+// Si se abre como archivo local (file://), cae a localhost:8000.
+const API = location.protocol.startsWith("http") ? location.origin : "http://localhost:8000";
+const $ = id => document.getElementById(id);
+let file = null;
+
+async function health(){
+  try{
+    const r = await fetch(API + "/health"); const j = await r.json();
+    $("dot").className = "dot live";
+    $("ep").textContent = `${j.detector} · ${j.model_version}`;
+  }catch(e){ $("ep").textContent = "API offline — levantá el server"; }
+}
+health();
+
+const vp = $("viewport");
+vp.addEventListener("click", ()=> $("file").click());
+vp.addEventListener("dragover", e=>{e.preventDefault(); vp.classList.add("drag");});
+vp.addEventListener("dragleave", ()=> vp.classList.remove("drag"));
+vp.addEventListener("drop", e=>{e.preventDefault(); vp.classList.remove("drag");
+  if(e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);});
+$("file").addEventListener("change", e=>{ if(e.target.files[0]) setFile(e.target.files[0]); });
+
+function setFile(f){
+  file = f;
+  const img = $("preview");
+  img.src = URL.createObjectURL(f); img.style.display = "block";
+  $("hint").style.display = "none";
+  $("run").disabled = false;
+}
+
+$("reset").addEventListener("click", ()=>{
+  file=null; $("preview").style.display="none"; $("preview").src="";
+  $("hint").style.display="block"; $("run").disabled=true;
+  $("count").textContent="—"; $("confVal").textContent="—"; $("confBar").style.width="0";
+  $("lamp").className="lamp"; $("statusTxt").textContent="Sin muestra";
+  $("mv").textContent="—"; $("iid").textContent="—"; $("meta").textContent="—";
+  $("banner").className="banner";
+});
+
+$("run").addEventListener("click", async ()=>{
+  if(!file) return;
+  $("run").disabled=true; $("spin").style.display="block"; $("preview").style.opacity=".25";
+  $("statusTxt").textContent="Analizando…";
+  try{
+    const fd = new FormData(); fd.append("file", file);
+    const r = await fetch(API + "/infer", {method:"POST", body:fd});
+    if(!r.ok) throw new Error("HTTP " + r.status);
+    const j = await r.json();
+    // IMAGEN* devuelta por el repositorio
+    $("preview").src = API + j.annotated_image_url + "?t=" + Date.now();
+    $("preview").style.opacity="1";
+    $("count").textContent = j.cantidad;
+    const pct = Math.round(j.avg_confidence*100);
+    $("confBar").style.width = pct + "%";
+    $("confVal").textContent = pct + "%";
+    $("mv").textContent = j.model_version;
+    $("iid").textContent = j.image_id;
+    if(j.success){
+      $("lamp").className="lamp ok"; $("statusTxt").textContent="Resultado confiable";
+      $("banner").className="banner";
+    }else{
+      $("lamp").className="lamp bad"; $("statusTxt").textContent="Revisar manualmente";
+      $("banner").className="banner warn";
+      $("banner").textContent="success=false — la confianza quedó por debajo del umbral. Conviene revisar esta imagen a mano.";
+    }
+    const meta = await (await fetch(API + j.metadata_url + "?t=" + Date.now())).json();
+    $("meta").textContent = JSON.stringify(meta, null, 2);
+  }catch(e){
+    $("statusTxt").textContent="Error: " + e.message;
+    $("preview").style.opacity="1";
+  }finally{
+    $("spin").style.display="none"; $("run").disabled=false;
+  }
+});
+</script>
+</body>
+</html>
